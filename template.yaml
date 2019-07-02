@@ -1,0 +1,317 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: (Cloudfront-as-default-01) Simple VOD CloudFront distribution with an S3 origin and MediaConvert
+
+Mappings:
+  RepoBucket:
+    name:
+      "prefix": "cf-as-default1"
+  Lambda:
+    code:
+      "transcoding": "ott-vod/lambda/latest/transcoding-function.zip"
+      "custompresets": "ott-vod/lambda/latest/custom-presets-function.zip"
+
+Parameters:
+  PackageType:
+    Description: VOD Packaging Type.
+    Default: HLS
+    Type: String
+    AllowedValues:
+      - HLS
+  BucketName:
+    Description: Bucket Name Prefix. The bucket created would be {BucketName}-AWSAccountId-AWSRegion
+    AllowedPattern: '.+'
+    Type: String
+  InputPrefix:
+    Description: The watch folder for incoming files in the above bucket
+    Default: input/
+    Type: String
+  OutputPrefix:
+    Description: The output folder for processing files in the above bucket
+    Default: output/
+    Type: String
+  EmailAddress:
+    Description: The email address where you will be notified on transcoding job status
+    Type: String
+    AllowedPattern: '[^\s@]+@[^\s@]+\.[^\s@]+'
+
+Conditions:
+  HLSPackageTypeCondition: !And
+    - !Equals [!Ref PackageType, HLS]
+    - !Not [!Equals [!Ref PackageType, BOTH]]
+
+Resources:
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: TranscodingFunctionPerm
+    Properties:
+       BucketName: !Sub ${BucketName}-${AWS::AccountId}-${AWS::Region}
+       BucketEncryption:
+         ServerSideEncryptionConfiguration:
+           -
+             ServerSideEncryptionByDefault:
+               SSEAlgorithm: AES256
+       CorsConfiguration:
+         CorsRules:
+           -
+             AllowedHeaders:
+               - '*'
+             AllowedMethods:
+               - 'GET'
+             AllowedOrigins:
+               - '*'
+             ExposedHeaders:
+               - 'ETAG'
+             MaxAge: 3000
+       NotificationConfiguration:
+         LambdaConfigurations:
+           -
+            Function: !Ref TranscodingFunctionVersion
+            Event: "s3:ObjectCreated:*"
+            Filter:
+              S3Key:
+                Rules:
+                  -
+                    Name: prefix
+                    Value: !Sub ${InputPrefix}
+
+  SourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+       Bucket: !Ref SourceBucket
+       PolicyDocument:
+         Statement:
+             - Sid: PolicyForCloudFrontPrivateContent
+               Effect: Allow
+               Principal:
+                 CanonicalUser: !GetAtt OriginAccessIdentity.S3CanonicalUserId
+               Action:
+                 - 's3:GetObject'
+               Resource: !Sub arn:aws:s3:::${SourceBucket}/*
+
+  MediaConvertJobRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "mediaconvert.amazonaws.com"
+                - "mediaconvert.us-east-2.amazonaws.com"
+                - "mediaconvert.us-east-1.amazonaws.com"
+                - "mediaconvert.us-west-1.amazonaws.com"
+                - "mediaconvert.us-west-2.amazonaws.com"
+                - "mediaconvert.ap-northeast-1.amazonaws.com"
+                - "mediaconvert.ap-northeast-2.amazonaws.com"
+                - "mediaconvert.ap-south-1.amazonaws.com"
+                - "mediaconvert.ap-southeast-1.amazonaws.com"
+                - "mediaconvert.ap-southeast-2.amazonaws.com"
+                - "mediaconvert.ca-central-1.amazonaws.com"
+                - "mediaconvert.eu-central-1.amazonaws.com"
+                - "mediaconvert.eu-west-1.amazonaws.com"
+                - "mediaconvert.eu-west-2.amazonaws.com"
+                - "mediaconvert.sa-east-1.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: "CustomPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:*
+                    - sns:*
+                    - logs:*
+                    - cloudwatch:*
+                    - autoscaling:Describe*
+                  Resource: "*"
+
+  TranscodingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs8.10
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 290
+      CodeUri:
+        Bucket: !Join ["-", [!FindInMap ["RepoBucket", "name", "prefix"], !Ref "AWS::Region"]]
+        Key: !FindInMap ["Lambda", "code", "transcoding"]
+      Role: !GetAtt TranscodingFunctionRole.Arn
+      Environment:
+        Variables:
+          JOB_ROLE: !GetAtt MediaConvertJobRole.Arn
+          INPUT_PREFIX: !Ref InputPrefix
+          OUTPUT_PREFIX: !Ref OutputPrefix
+          PACKAGE_TYPE:
+            !GetAtt CustomPresetsArtifacts.hls
+
+  TranscodingFunctionPerm:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref TranscodingFunctionVersion
+      Principal: 's3.amazonaws.com'
+      SourceArn: !Sub arn:aws:s3:::${BucketName}-${AWS::AccountId}-${AWS::Region}
+
+  TranscodingFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+                - "s3.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/service-role/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - "arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess"
+      Policies:
+        -
+          PolicyName: "CustomPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:*
+                  Resource: !Sub arn:aws:s3:::${BucketName}-${AWS::AccountId}-${AWS::Region}
+                - Effect: Allow
+                  Action:
+                    - s3:*
+                  Resource: !Sub arn:aws:s3:::${BucketName}-${AWS::AccountId}-${AWS::Region}/*
+                - Effect: Allow
+                  Action:
+                    - mediaconvert:*
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - iam:PassRole
+                  Resource: !GetAtt MediaConvertJobRole.Arn
+
+  TranscodingFunctionVersion:
+    Type: "AWS::Lambda::Version"
+    Properties:
+      FunctionName: !Ref TranscodingFunction
+      Description: "A version of TranscodingFunction"
+
+  CustomPresetsArtifacts:
+    Type: 'Custom::Presets'
+    Properties:
+      ServiceToken: !GetAtt
+        - CustomPresetsFunction
+        - Arn
+      PresetsPrefix: "Custom-"
+
+  CustomPresetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri:
+        Bucket: !Join ["-", [!FindInMap ["RepoBucket", "name", "prefix"], !Ref "AWS::Region"]]
+        Key: !FindInMap ["Lambda", "code", "custompresets"]
+      MemorySize: 128
+      Handler: index.handler
+      Role: !GetAtt TranscodingFunctionRole.Arn
+      Timeout: 300
+      Runtime: nodejs8.10
+
+  SimpleVODTopic:
+    Type: AWS::SNS::Topic
+
+  MySNSPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: !Sub ${AWS::StackName}-MySNSPolicy
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: "events.amazonaws.com"
+          Action: sns:Publish
+          Resource: !Ref SimpleVODTopic
+      Topics:
+      - !Ref SimpleVODTopic
+
+  SimpleVODSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref EmailAddress
+      Protocol: email
+      TopicArn: !Ref SimpleVODTopic
+
+  SimpleVODEventRule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: !Sub "${AWS::StackName} - Job Event Rule to send email"
+      EventPattern:
+        source:
+          - "aws.mediaconvert"
+        detail:
+          status:
+            - "ERROR"
+            - "COMPLETE"
+      State: "ENABLED"
+      Targets:
+        -
+          Arn: !Ref SimpleVODTopic
+          Id: "JobTopic"
+          InputTransformer:
+            InputTemplate: '"Job <jobId> finished with status <status>. Job details: https://<region>.console.aws.amazon.com/mediaconvert/home?region=<region>#/jobs/summary/<jobId>"'
+            InputPathsMap:
+              region: "$.region"
+              jobId: "$.detail.jobId"
+              status: "$.detail.status"
+
+  OriginAccessIdentity:
+    Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity'
+    Metadata:
+      Comment: !Sub "${AWS::StackName} - Access private S3 bucket content only through CloudFront"
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub "${AWS::StackName} - Access private S3 bucket content only through CloudFront"
+
+  SimpleVODDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+        - DomainName: !Sub ${SourceBucket}.s3.amazonaws.com
+          Id: myS3Origin
+          S3OriginConfig:
+            OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${OriginAccessIdentity}"
+        Enabled: 'true'
+        Comment: !Sub "${AWS::StackName} - distribution for vod content delivery"
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          TargetOriginId: myS3Origin
+          ViewerProtocolPolicy: allow-all
+          MinTTL: '864000'
+          SmoothStreaming: 'false'
+          Compress: 'true'
+          ForwardedValues:
+            QueryString: 'false'
+            Cookies:
+              Forward: 'none'
+
+        PriceClass: PriceClass_All
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: 'true'
+Outputs:
+  BucketName:
+    Value: !Ref SourceBucket
+  TranscodingFunctionVersion:
+    Value: !Ref TranscodingFunctionVersion
+  HLSPresets:
+    Value: !GetAtt CustomPresetsArtifacts.hls
+  HLSEndpoint:
+    Value: !Sub https://${SimpleVODDistribution.DomainName}/${OutputPrefix}
