@@ -17,7 +17,6 @@ exports.handler =  async (event, context) => {
   let presetsPrefix = event.ResourceProperties.PresetsPrefix;
   let responseData = {};
   responseData.hls = [];
-  responseData.dash = [];
 
   if(!INITIALISED){
     await setMediaConvertEndpoint(mediaconvert);
@@ -31,8 +30,6 @@ exports.handler =  async (event, context) => {
     return;
   }
 
-  //create the DASH Presets used for transcoding
-  await createDASHPreset(presetsPrefix,responseData);
   //create the HLS Presets used for transcoding
   await createHLSPreset(presetsPrefix,responseData);
   //prepare the response
@@ -57,49 +54,6 @@ async function setMediaConvertEndpoint(mediaconvert){
 //send back the HLS and DASH presets created
 async function prepareResponseData(responseData){
   responseData.hls = "hls:"+responseData.hls.join(",");
-  responseData.dash = "dash:"+responseData.dash.join(",");
-}
-
-//creates the DASH presets used for VOD transcoding.
-//Example preset name pattern Custom-Ott_Dash_Mp4_Avc_Aac_16x9_widthxheight_fps_bitrate
-//following profiles are created
-//Package Type |  Resolution (width x height) |	Bitrate (Mbps)
-// DASH	       |       480 x 270	            |   0.4
-// DASH	       |       640 x 360	            |   0.6
-// DASH	       |       640 x 360	            |   1.2
-// DASH	       |       960 x 540	            |   3.5
-// DASH	       |       1280 x 720	            |   5.0
-// DASH	       |       1920 x 1080	          |   8.5
-//you can add additional bitrates by modifying 'dash_presets' node in the config.json
-async function createDASHPreset(presetsPrefix,responseData) {
-  console.log("In createDASHPreset:%s",presetsPrefix);
-
-  //create the presets
-  for(let preset of configJson.dash_presets) {
-    let presetParams = prepareDASHPreset(configJson.dash_default_preset, presetsPrefix, preset);
-    let response = await mediaconvert.createPreset(presetParams).promise();
-    responseData.dash.push(response.Preset.Name);
-  }
-}
-
-//helper function to populate the DASH parameters in the MediaConvert Job
-function prepareDASHPreset(presetParams, presetsPrefix, preset) {
-  let fps = Math.ceil(preset.framerateNumerator / 1001 );
-  let name = util.format("Ott_Dash_Mp4_Avc_Aac_16x9_%dx%d_%dfps_%dkbps",preset.width,preset.height,fps, preset.videoBitrate/1000);
-  console.log("creating DASH Preset :%s",name);
-
-  presetParams.Name = presetsPrefix+name;
-  presetParams.Description = presetsPrefix+name;
-  presetParams.Settings.VideoDescription.Width = preset.width;
-  presetParams.Settings.VideoDescription.Height = preset.height;
-  presetParams.Settings.VideoDescription.CodecSettings.H264Settings.Bitrate = preset.videoBitrate;
-  presetParams.Settings.VideoDescription.CodecSettings.H264Settings.AdaptiveQuantization = preset.adaptiveQuantization;
-  presetParams.Settings.VideoDescription.CodecSettings.H264Settings.CodecProfile = preset.videoCodecProfile;
-  presetParams.Settings.VideoDescription.CodecSettings.H264Settings.CodecLevel = preset.codecLevel;
-  presetParams.Settings.VideoDescription.CodecSettings.H264Settings.FramerateNumerator = preset.framerateNumerator;
-  presetParams.Settings.VideoDescription.CodecSettings.H264Settings.HrdBufferSize = preset.videoBitrate * 2;
-  presetParams.Settings.VideoDescription.CodecSettings.H264Settings.GopSize = preset.gopSize;
-  return presetParams;
 }
 
 //creates the HLS presets used for VOD transcoding.
@@ -107,8 +61,7 @@ function prepareDASHPreset(presetParams, presetsPrefix, preset) {
 //following profiles are created
 //Package Type |  Resolution (width x height) |	Bitrate (Mbps)
 // HLS	       |       480 x 270	            |   0.4
-// HLS	       |       640 x 360	            |   0.6
-// HLS	       |       640 x 360	            |   1.2
+// HLS	       |       640 x 360	            |   0.92
 // HLS	       |       960 x 540	            |   3.5
 // HLS	       |       1280 x 720	            |   5.0
 // HLS	       |       1920 x 1080	          |   8.5
@@ -152,14 +105,6 @@ async function deletePresets(presetsPrefix){
   for(let preset of configJson.hls_presets) {
     let fps = Math.ceil(preset.framerateNumerator / 1001 );
     let name = util.format("Ott_Hls_Ts_Avc_Aac_16x9_%dx%d_%dfps_%dkbps",preset.width,preset.height,fps, preset.videoBitrate/1000);
-    console.log("deleting preset :%s",presetsPrefix+name)
-    await mediaconvert.deletePreset({"Name": presetsPrefix+name}).promise();
-  }
-
-  //delete the DASH presets
-  for(let preset of configJson.dash_presets) {
-    let fps = Math.ceil(preset.framerateNumerator / 1001 );
-    let name = util.format("Ott_Dash_Mp4_Avc_Aac_16x9_%dx%d_%dfps_%dkbps",preset.width,preset.height,fps, preset.videoBitrate/1000);
     console.log("deleting preset :%s",presetsPrefix+name)
     await mediaconvert.deletePreset({"Name": presetsPrefix+name}).promise();
   }

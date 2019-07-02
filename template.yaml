@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: (Cloudfront-as-default-01) Simple VOD CloudFront distribution with an S3 origin and MediaConvert
+Description: Simple HLS VOD CloudFront distribution with an S3 origin and MediaConvert
 
 Mappings:
   RepoBucket:

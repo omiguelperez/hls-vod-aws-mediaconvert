@@ -57,7 +57,7 @@ async function setMediaConvertEndpoint(mediaconvert){
     mediaconvert.endpoint = endpoint.Endpoints[0].Url;
 }
 
-//create the job with input and output configurations for HLS and DASH
+//create the job with input and output configurations for HLS
 function createJob(event) {
   let packageTypes = PACKAGE_TYPE.split("|");
   let bucket = event.Records[0].s3.bucket.name;
@@ -137,35 +137,6 @@ function createJob(event) {
       hlsSettings.ClientCache = "ENABLED";
       hlsSettings.StreamInfResolution = "INCLUDE";
       outputGroupSettings.HlsGroupSettings = hlsSettings;
-      output.OutputGroupSettings = outputGroupSettings;
-      params.Settings.OutputGroups.push(output);
-    }
-    else if (type[0] = "dash") {
-      var output = {};
-      output.Name = "DASH ISO";
-      output.Outputs = [];
-      let profiles = type[1].split(",");
-
-      profiles.forEach(function(profile, ind) {
-        let preset = {};
-        preset.Preset = profile;
-        preset.NameModifier = "/"+profile; //"/preset-" + ind;
-        output.Outputs.push(preset);
-      });
-       output.Outputs.push({
-            "Preset": "System-Ott_Dash_Mp4_Aac_He_96Kbps",
-            "NameModifier": "/preset-0_Ott_Dash_Mp4_Aac_He_96Kbps"
-        });
-
-      var outputGroupSettings = {};
-      outputGroupSettings.Type = "DASH_ISO_GROUP_SETTINGS";
-      var dashSettings = {};
-      dashSettings.SegmentLength = 4;
-      dashSettings.Destination = "s3://" + bucket + "/" + OUTPUT_PREFIX + type[0] + "/" + getContentPrefix(key);
-      dashSettings.FragmentLength = 2;
-      dashSettings.SegmentControl = "SEGMENTED_FILES";//"SINGLE_FILE"
-      dashSettings.HbbtvCompliance = "NONE";
-      outputGroupSettings.DashIsoGroupSettings = dashSettings;
       output.OutputGroupSettings = outputGroupSettings;
       params.Settings.OutputGroups.push(output);
     }
