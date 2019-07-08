@@ -2,3 +2,5 @@
 .idea/codeStyles/codeStyleConfig.xml
 *.xml
 .idea/hls-vod-aws-mediaconvert.iml
+.DS_Store
+hls

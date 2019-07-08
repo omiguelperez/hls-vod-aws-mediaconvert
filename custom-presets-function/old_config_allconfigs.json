@@ -111,15 +111,37 @@
   },
   "hls_presets": [
     {
+      "width": 480,
+      "height": 270,
+      "videoBitrate": 400000,
+      "framerateNumerator": 15000,
+      "gopSize": 45,
+      "adaptiveQuantization": "MEDIUM",
+      "codecLevel": "AUTO",
+      "videoCodecProfile": "MAIN",
+      "audioBitrate": 64000
+    },
+    {
       "width": 640,
       "height": 360,
-      "videoBitrate": 1200000,
+      "videoBitrate": 800000,
       "framerateNumerator": 30000,
       "gopSize": 90,
       "adaptiveQuantization": "MEDIUM",
       "codecLevel": "AUTO",
       "videoCodecProfile": "MAIN",
       "audioBitrate": 64000
+    },
+    {
+      "width": 960,
+      "height": 540,
+      "videoBitrate": 3500000,
+      "framerateNumerator": 30000,
+      "gopSize": 90,
+      "adaptiveQuantization": "HIGH",
+      "codecLevel": "AUTO",
+      "videoCodecProfile": "HIGH",
+      "audioBitrate": 96000
     },
     {
       "width": 1280,

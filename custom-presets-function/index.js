@@ -51,7 +51,7 @@ async function setMediaConvertEndpoint(mediaconvert){
     mediaconvert.endpoint = endpoint.Endpoints[0].Url;
 }
 
-//send back the HLS and DASH presets created
+//send back the HLS presets created
 async function prepareResponseData(responseData){
   responseData.hls = "hls:"+responseData.hls.join(",");
 }
@@ -61,7 +61,7 @@ async function prepareResponseData(responseData){
 //following profiles are created
 //Package Type |  Resolution (width x height) |	Bitrate (Mbps)
 // HLS	       |       480 x 270	            |   0.4
-// HLS	       |       640 x 360	            |   0.92
+// HLS	       |       640 x 360	            |   0.8
 // HLS	       |       960 x 540	            |   3.5
 // HLS	       |       1280 x 720	            |   5.0
 // HLS	       |       1920 x 1080	          |   8.5

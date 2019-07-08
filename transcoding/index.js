@@ -57,7 +57,7 @@ async function setMediaConvertEndpoint(mediaconvert){
     mediaconvert.endpoint = endpoint.Endpoints[0].Url;
 }
 
-//create the job with input and output configurations for HLS
+//create the job with input and output configurations for HLS and DASH
 function createJob(event) {
   let packageTypes = PACKAGE_TYPE.split("|");
   let bucket = event.Records[0].s3.bucket.name;
@@ -70,7 +70,42 @@ function createJob(event) {
     "Queue": "",
     "Role": MEDIACONVERT_ROLE,
     "Settings": {
-      "OutputGroups": [],
+      "OutputGroups": [
+        {
+          "Name": "File Group",
+          "OutputGroupSettings": {
+            "Type": "FILE_GROUP_SETTINGS",
+            "FileGroupSettings": {}
+          },
+          "Outputs": [
+            {
+              "VideoDescription": {
+                "ScalingBehavior": "DEFAULT",
+                "TimecodeInsertion": "DISABLED",
+                "AntiAlias": "ENABLED",
+                "Sharpness": 50,
+                "CodecSettings": {
+                  "Codec": "FRAME_CAPTURE",
+                  "FrameCaptureSettings": {
+                    "FramerateNumerator": 30,
+                    "FramerateDenominator": 5,
+                    "MaxCaptures": 1,
+                    "Quality": 70
+                  }
+                },
+                "Width": 640,
+                "AfdSignaling": "NONE",
+                "DropFrameTimecode": "ENABLED",
+                "RespondToAfd": "NONE",
+                "ColorMetadata": "INSERT",
+              },
+              "ContainerSettings": {
+                "Container": "RAW"
+              }
+            }
+          ]
+        }
+      ],
       "AdAvailOffset": 0,
       "Inputs": [{
         "AudioSelectors": {
@@ -85,7 +120,8 @@ function createJob(event) {
           }
         },
         "VideoSelector": {
-          "ColorSpace": "FOLLOW"
+          "ColorSpace": "FOLLOW",
+          "Rotate": "AUTO"
         },
         "FilterEnable": "AUTO",
         "PsiControl": "USE_PSI",
