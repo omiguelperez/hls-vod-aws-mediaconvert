@@ -1,3 +1,10 @@
+# This repo includes 2 solutions:
+
+1. Cloud formation - all necessary files are in the 'hls' folder. The inconvenience with this solution is that if you need to change anything in the transcoding settings, you need to rebuild a new Cloud Formation Stack and a new CloudFront exit point is created.
+
+2. Manual build of the stack with ability to change settings at any point (in Lambda, in certificates, IAM roles, CloudFront, MediaConvert). Use files in 'Useful_Files' and get inspired from the presently working stack. I need to create various IAM roles for Lambda to access S3, CloudFront to access S3, etc.
+
+
 # hls-vod-aws-mediaconvert
 A cloud formations template for HLS video transcoding with MediaConvert, S3, Lambda and CloudFront
 
